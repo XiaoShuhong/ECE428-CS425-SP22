@@ -23,7 +23,7 @@ def main():
             msg_connect = "{0} - {1} connected\n".format(time.time(),node)
             #print(msg_connect)
             ## f'{time.time()} - {node} connected'
-            s.send(msg_connect.encode("utf-8"))
+            s.send(msg_connect.encode("utf-8"),MSG_NOSIGNAL)
             #get event from generator
             flag=1
             while flag:
@@ -34,12 +34,12 @@ def main():
                         msg=packet.split(" ")[1]
                         # print(t,msg)
                         ## msg_event=f'{t} {node}\n'f'{msg}'
-                        msg_event="{0} {1} {2}{3}".format(t,node,"\n",msg)
+                        msg_event="{0} {1} {2}".format(t,node,msg)
                         #print(msg_event)
-                        s.send(msg_event.encode("utf-8"))
+                        s.send(msg_event.encode("utf-8"),MSG_NOSIGNAL)
                     
-                msg_disconnect = "{0} - {1} disconnected".format(time.time(),node)
-                s.send(msg_disconnect.encode("utf-8"))
+                msg_disconnect = "{0} - {1} disconnected\n".format(time.time(),node)
+                s.send(msg_disconnect.encode("utf-8"),MSG_NOSIGNAL)
                 flag=0
             print("finish sending")
                         
@@ -50,3 +50,6 @@ def main():
 if __name__ == '__main__':
     main()
     
+        
+        
+          
