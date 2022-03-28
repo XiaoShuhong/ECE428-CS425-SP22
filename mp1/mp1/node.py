@@ -57,7 +57,11 @@ class Myqueue:
             del self.recv_feedback[msg.MessageID]
             self.numitem-=1
             return 0
-    
+    def delete_recv_feedback(self,msg):
+        if msg.MessageID not in self.recv_feedback.keys():
+            return -1
+        else:
+            del self.recv_feedback[msg.MessageID]
     def update_msg_priority_and_reorder(self,msg):
         if self.numitem==0:
             return -1
@@ -162,6 +166,8 @@ def deliver_queue_head(msg):
             flag=0 
     if flag==1:
         update_balances()
+        myqueue.delete_msg(msg)
+        myqueue.delete_recv_feedback(msg)
     
     
 def update_balances():
