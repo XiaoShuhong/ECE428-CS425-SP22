@@ -152,7 +152,20 @@ def tcp_connect(target_ip,target_port):
             break
     return tcp_socket
 
-def deliver_queue_head():
+def deliver_queue_head(msg):
+    global connection_bulid
+    global myqueue
+    feed_back_recv= myqueue.recv_feedback[msg.MessageID]
+    flag=1
+    for conn in connection_bulid:
+        if conn not in feed_back_recv:
+            flag=0 
+    if flag==1:
+        update_balances()
+    
+    
+def update_balances():
+    global myqueue
     
     pass
 
@@ -187,7 +200,7 @@ def multicast(msg):
         send_res=tcp_socket.send(send_data)
         if send_res<0:
             connection_bulid.remove(conn)
-            deliver_queue_head()
+            deliver_queue_head(msg)
  
 def receive_message(tcp_server_socket):
     global msg_see_before
@@ -198,7 +211,7 @@ def receive_message(tcp_server_socket):
         msg=json.loads(recv_data,object_hook=json_2_msgobj)
         if msg.MessageID in msg_see_before:
             deliver(msg)
-            deliver_queue_head()
+            deliver_queue_head(msg)
         else:
             deliver(msg)
             multicast(msg)
