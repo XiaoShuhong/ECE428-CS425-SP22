@@ -1,7 +1,8 @@
 from platform import node
+from re import L
 import sys 
 import socket
-from threading import Thread
+from threading import Thread,Lock
 import json
 
 
@@ -13,6 +14,11 @@ connection_bulid=[]
 balance = 0   # self balance
 tcp_socket_dict=dict()
 timestamp=0
+timestamp_lock=Lock() 
+tcp_connect_lock=Lock()
+msg_see_before_lock=Lock()
+myqueue_lock=Lock()
+balance_lock=Lock()
 class Myqueue:
     def __init__(self):
         self.queue=[]
@@ -164,22 +170,30 @@ def tcp_connect(target_ip,target_port):
         server_addr=(target_ip,target_port)
         connect_return=tcp_socket.connect(server_addr)
         if (connect_return==0):   # 0 = success
+            tcp_connect_lock.acquire()   ##add lock to avoid bug1
             ALL_CONNECTED+=1      #######potential bug1: a possibility that many connection update on the same ALL_CONNECTED to make it just +1 instead of +n #############
+            tcp_connect_lock.release()  
             break
     return tcp_socket
 
 def deliver_queue_head(msg):   # deliver the queue head to application layer and delete it from the queue
     global connection_bulid
     global myqueue
+    myqueue_lock.acquire()
     feed_back_recv= myqueue.recv_feedback[msg.MessageID]
+    myqueue_lock.release()
     flag=1
+    connection_bulid_lock.acquire()
     for conn in connection_bulid:
         if conn not in feed_back_recv:
             flag=0 
+    connection_bulid_lock.release()
     if flag==1:
         update_balances(msg)
+        myqueue_lock.acquire()
         myqueue.delete_msg(msg)
         myqueue.delete_recv_feedback(msg)
+        myqueue_lock.release()
     
 def update_balances(msg):
     global myqueue
@@ -187,12 +201,16 @@ def update_balances(msg):
     
     operation = msg.Content.split(' ')[0]
     if operation == 'DEPOSIT':
+        myqueue_lock.acquire()
         myqueue.balance_dict[msg.Content.split(' ')[1]] += msg.Content.split(' ')[2]
+        myqueue_lock.release()
 
     elif operation == 'TRANSFER':
+        myqueue_lock.acquire()
         if myqueue.balance_dict[msg.Content.split(' ')[1]]>=msg.Content.split(' ')[4]:
             myqueue.balance_dict[msg.Content.split(' ')[1]] -= msg.Content.split(' ')[4]
             myqueue.balance_dict[msg.Content.split(' ')[3]] += msg.Content.split(' ')[4]
+            myqueue_lock.release()
         else:
             print('No enough balance for TRANSFER in ',msg.Content.split(' ')[1],'!')
             return -1
@@ -201,12 +219,15 @@ def update_balances(msg):
         return -1
 
     # update self balance
+    myqueue_lock.acquire()
+    balance_lock.acquire()
     balance = myqueue.balance_dict[node_name]
-
+    balance_lock.release()
     BALANCES_log = 'BALANCES '
     for node_id in myqueue.balance_dict.keys():
         BALANCES_log = BALANCES_log + str(node_id) + ':' + str(myqueue.balance_dict[node_id]) + ' '
     print(BALANCES_log)
+    myqueue_lock.release()
 
 
 def deliver(msg):  # upon receive a message
@@ -216,9 +237,13 @@ def deliver(msg):  # upon receive a message
     global timestamp
 
     # if have seen before and this time is just a R-multicast from someone else
+    msg_see_before_lock.acquire()
     if msg.MessageID in msg_see_before:
+        msg_see_before_lock.release()
+        myqueue_lock.acquire()
         myqueue.update_msg_priority_and_reorder(msg)
         myqueue.update_msg_recv_feedback(msg,msg.SenderNodeName)
+        myqueue_lock.release()
 
     # if this is the first time to see this message
     else: 
@@ -226,24 +251,34 @@ def deliver(msg):  # upon receive a message
         pre_sequence_number=msg.sequence_number
         pre_node=pre_sequence_number.split('.')[0]
         pre_t=pre_sequence_number.split('.')[1]
+        timestamp_lock.acquire()
         if(timestamp>pre_t or (timestamp==pre_t and node_name>pre_node)):
             msg.sequence_number=node_name+'.'+str(timestamp)
             timestamp+=1
+            timestamp_lock.release()
+        msg_see_before_lock.acquire()
         msg_see_before.append(msg.MessageID)
+        msg_see_before_lock.release()
         myqueue.insert_msg(msg)
     
 def multicast(msg):
     global connection_bulid
     global tcp_socket_dict
     local_connect_copy=[]
+    connection_bulid_lock.acquire()
     for e in connection_bulid:
         local_connect_copy.append(e)
+    connection_bulid_lock.release()
     send_data=json.dumps(msg,default=msgobj_2_json).encode('utf-8')  # the encoded data need to be sent
     for conn in local_connect_copy:
+        tcp_connect_lock.acquire()
         tcp_socket=tcp_socket_dict[conn]
+        tcp_connect_lock.release()
         send_res=tcp_socket.send(send_data)
         if send_res<0:  # if target node failed
+            connection_bulid_lock.acquire()
             connection_bulid.remove(conn)
+            connection_bulid_lock.release()
             deliver_queue_head(msg)
  
 def receive_message(tcp_server_socket):
@@ -253,9 +288,12 @@ def receive_message(tcp_server_socket):
         client_socket, clientAddr = tcp_server_socket.accept()
         recv_data=client_socket.recv(128).decode('utf-8')
         msg=json.loads(recv_data,object_hook=json_2_msgobj)
+        msg_see_before_lock.acquire()
         if msg.MessageID in msg_see_before:
+            msg_see_before_lock.release()
             deliver(msg)
             deliver_queue_head(msg)
+            
         else:
             deliver(msg)
             multicast(msg)
@@ -266,46 +304,59 @@ def get_events():
     while True:
         for line in sys.stdin:
             if len(line)!=0:
+                timestamp_lock.acquire()
                 MessageID=node_name+'.'+str(timestamp)
                 sequence_number=node_name+'.'+str(timestamp)
                 timestamp+=1
+                timestamp_lock.release()
                 new_msg=Message(node_name,line,MessageID,sequence_number)
                 deliver(new_msg)  # deliver to self
                 multicast(new_msg)  # send to others
-    
+   
+connection_bulid_lock=Lock()
+tcp_socket_dict_lock=Lock()
 def main():
     if len(sys.argv) != 4:
         print('Incorrect input arguments')
         sys.exit(0)
     global node_name
     global connection_bulid
+    global tcp_socket_dict
+    global ALL_CONNECTED
     node_name = sys.argv[1]
     port = int(sys.argv[2])
     host = '127.0.0.1' # can connect with any ip
     config_fname = sys.argv[3]
 
     #### update: open a new thread for listening (there may be bugs), since main thread is used to read stdin ########
-    listen_socket=Thread(target=tcp_listen,args=(host,port))
-    listen_start = listen_socket.start()
+    ### no need to run with a new thread, tcp_listen end quickly
+    listen_socket=tcp_listen(host,port)
+    
 
     node_num,node_info_list=read_config(config_fname)
-    global tcp_socket_dict
-    global ALL_CONNECTED
+    
     for e in node_info_list:
         node_id=e.split(" ")[0]
+        connection_bulid_lock.acquire()
         connection_bulid.append(node_id)
+        connection_bulid_lock.release()
         node_ip_addr=e.split(" ")[1]
         node_port=int(e.split(" ")[2])
         #print(node_id,node_ip_addr,node_port)
         new_connect=Thread(target=tcp_connect,args=(node_ip_addr,node_port))
         socket_return=new_connect.start()
+        tcp_socket_dict_lock.acquire()
         tcp_socket_dict[node_id]=socket_return
+        tcp_socket_dict_lock.release()
     while True:
-        if ALL_CONNECTED==node_num:   ##### bug!!!! #####
+        tcp_connect_lock.acquire()
+        if ALL_CONNECTED==node_num:   ##### bug!!!! ##### 
+            tcp_connect_lock.release()
             break
     # my_listen=Thread(target=tcp_recvdata,args=(listen_socket,))
     # my_listen.start()
-
+    my_listen=Thread(target=receive_message,args=(listen_socket,))
+    my_listen.start()
     # Normal working process
     while True:
         get_events()
