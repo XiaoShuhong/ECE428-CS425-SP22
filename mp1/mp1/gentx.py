@@ -31,6 +31,8 @@ while True:
         account = random_account()
         amount = random.randrange(1,101)
         print(f"DEPOSIT {account} {amount}")
+        # a=f"DEPOSIT {account} {amount}"
+        # print(a.split())
         balances[account] += amount
     else:
         illegal = random.random() < ILLEGAL_TRANSFER_PROB
@@ -49,6 +51,8 @@ while True:
                 break
 
         print(f"TRANSFER {account} -> {dest} {amount}")
+        # a=f"TRANSFER {account} -> {dest} {amount}"
+        # print(a.split())
         if not illegal: # update local balances
             balances[account] -= amount
             balances[dest] += amount

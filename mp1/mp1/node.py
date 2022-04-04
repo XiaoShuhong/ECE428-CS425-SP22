@@ -11,14 +11,14 @@ id=0
 node_name=''
 msg_see_before=[]
 connection_bulid=[]
-balance = 0   # self balance
 tcp_socket_dict=dict()
 timestamp=0
 timestamp_lock=Lock() 
 tcp_connect_lock=Lock()
 msg_see_before_lock=Lock()
 myqueue_lock=Lock()
-balance_lock=Lock()
+connection_bulid_lock=Lock()
+tcp_socket_dict_lock=Lock()
 class Myqueue:
     def __init__(self):
         self.queue=[]
@@ -30,9 +30,6 @@ class Myqueue:
             self.queue.append(msg)
             self.recv_feedback[msg.MessageID]=[]   # dictionary, put in the nodename that has given a reply
             self.numitem+=1
-            ######### update: if new node id, set new key in balance dictionary and set it to 0 ################
-            if msg.MessageID.split('.')[0] not in self.balance_dict.keys():
-                self.balance_dict[msg.MessageID.split('.')[0]]=0
         else:
             # insert the message to the proper place it should be at
             for i in range(self.numitem):
@@ -197,22 +194,23 @@ def deliver_queue_head(msg):   # deliver the queue head to application layer and
     
 def update_balances(msg):
     global myqueue
-    global balance
-    
-    operation = msg.Content.split(' ')[0]
+
+    operation = msg.Content.split()[0]
     if operation == 'DEPOSIT':
         myqueue_lock.acquire()
-        myqueue.balance_dict[msg.Content.split(' ')[1]] += msg.Content.split(' ')[2]
+        if msg.Content.split()[1] not in myqueue.balance_dict.keys():
+            myqueue.balance_dict[msg.Content.split()[1]]=0
+        myqueue.balance_dict[msg.Content.split()[1]] += int(msg.Content.split()[2])
         myqueue_lock.release()
 
     elif operation == 'TRANSFER':
         myqueue_lock.acquire()
-        if myqueue.balance_dict[msg.Content.split(' ')[1]]>=msg.Content.split(' ')[4]:
-            myqueue.balance_dict[msg.Content.split(' ')[1]] -= msg.Content.split(' ')[4]
-            myqueue.balance_dict[msg.Content.split(' ')[3]] += msg.Content.split(' ')[4]
+        if myqueue.balance_dict[msg.Content.split()[1]]>=int(msg.Content.split()[4]):
+            myqueue.balance_dict[msg.Content.split()[1]] -= int(msg.Content.split()[4])
+            myqueue.balance_dict[msg.Content.split()[3]] += int(msg.Content.split()[4])
             myqueue_lock.release()
         else:
-            print('No enough balance for TRANSFER in ',msg.Content.split(' ')[1],'!')
+            print('No enough balance for TRANSFER in ',msg.Content.split()[1],'!')
             return -1
     else:
         print('Invalid operation! Please input DEPOSIT or TRANSFER!')
@@ -220,12 +218,9 @@ def update_balances(msg):
 
     # update self balance
     myqueue_lock.acquire()
-    balance_lock.acquire()
-    balance = myqueue.balance_dict[node_name]
-    balance_lock.release()
     BALANCES_log = 'BALANCES '
-    for node_id in myqueue.balance_dict.keys():
-        BALANCES_log = BALANCES_log + str(node_id) + ':' + str(myqueue.balance_dict[node_id]) + ' '
+    for account_id in myqueue.balance_dict.keys():
+        BALANCES_log = BALANCES_log + str(account_id) + ':' + str(myqueue.balance_dict[account_id]) + ' '
     print(BALANCES_log)
     myqueue_lock.release()
 
@@ -313,8 +308,7 @@ def get_events():
                 deliver(new_msg)  # deliver to self
                 multicast(new_msg)  # send to others
    
-connection_bulid_lock=Lock()
-tcp_socket_dict_lock=Lock()
+
 def main():
     if len(sys.argv) != 4:
         print('Incorrect input arguments')
