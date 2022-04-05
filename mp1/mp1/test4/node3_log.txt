@@ -1,0 +1,14 @@
+Time difference for node3.0 is: 11017.99726486206
+Time difference for node3.8 is: 12964.509725570679
+Time difference for node3.17 is: 10964.216947555542
+Time difference for node3.27 is: 9024.746417999268
+Time difference for node3.36 is: 18026.240825653076
+Time difference for node3.44 is: 14959.827899932861
+Time difference for node3.53 is: 12961.131811141968
+Time difference for node3.63 is: 10946.03443145752
+Time difference for node3.72 is: 9014.511108398438
+Time difference for node3.80 is: 14948.809385299683
+Time difference for node3.89 is: 11014.27149772644
+The number of message send is : 11
+The final average time difference is: 12349.299755963411
+The final bandwidth is: 1716

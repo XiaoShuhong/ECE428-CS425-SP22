@@ -1,0 +1,27 @@
+Time difference for node2.0 is: 3970.210552215576
+Time difference for node2.4 is: 3970.4179763793945
+Time difference for node2.8 is: 3970.4718589782715
+Time difference for node2.12 is: 3970.290184020996
+Time difference for node2.16 is: 3970.952272415161
+Time difference for node2.20 is: 3969.7580337524414
+Time difference for node2.24 is: 3969.303607940674
+Time difference for node2.28 is: 3970.125436782837
+Time difference for node2.32 is: 3972.18656539917
+Time difference for node2.36 is: 3972.545623779297
+Time difference for node2.40 is: 3969.8963165283203
+Time difference for node2.44 is: 3970.212697982788
+Time difference for node2.48 is: 3968.8503742218018
+Time difference for node2.52 is: 3972.3074436187744
+Time difference for node2.56 is: 3970.5522060394287
+Time difference for node2.60 is: 3972.330093383789
+Time difference for node2.64 is: 3971.4877605438232
+Time difference for node2.68 is: 3968.6386585235596
+Time difference for node2.72 is: 3968.9502716064453
+Time difference for node2.76 is: 3972.9297161102295
+Time difference for node2.80 is: 3973.8218784332275
+Time difference for node2.84 is: 3975.5849838256836
+Time difference for node2.88 is: 3972.278833389282
+Time difference for node2.92 is: 3975.080966949463
+The number of message send is : 24
+The final average time difference is: 3971.216013034185
+The final bandwidth is: 3744

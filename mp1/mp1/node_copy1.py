@@ -19,8 +19,6 @@ msg_see_before_lock=Lock()
 myqueue_lock=Lock()
 connection_bulid_lock=Lock()
 tcp_socket_dict_lock=Lock()
-delete_lock=Lock()
-time_record=dict()
 class Myqueue:
     def __init__(self):
         self.queue=[]
@@ -43,14 +41,12 @@ class Myqueue:
                 if msg_t<cur_t or (msg_t==cur_t and msg_node<cur_node):
                     self.queue.insert(i,msg)
                     self.recv_feedback[msg.MessageID]=[]
-                    self.recv_feedback[msg.MessageID].append(original_SenderNodeName)
                     self.numitem+=1
                     break
                 else:
                     if i==self.numitem-1:
                         self.queue.append(msg)
                         self.recv_feedback[msg.MessageID]=[]
-                        self.recv_feedback[msg.MessageID].append(original_SenderNodeName)
                         self.numitem+=1
                         
     def find_msg_index(self,msg):
@@ -125,7 +121,7 @@ def msgobj_2_json(msg):
         "sequence_number":msg.sequence_number,
         "p": "0"
     }    
-    file['p']=" "*(157-len(str(file)))
+    file['p']=" "*(129-len(str(file)))
     # print(file)
     # print(len(str(file)))
     return file
@@ -158,7 +154,7 @@ def tcp_listen(host,port):
     tcp_server_socket=socket.socket(socket.AF_INET,socket.SOCK_STREAM) 
     address=(host,port)
     tcp_server_socket.bind(address)
-    tcp_server_socket.listen(socket.SOMAXCONN)
+    tcp_server_socket.listen()
    
     return tcp_server_socket
      
@@ -195,50 +191,31 @@ def tcp_connect(target_ip,target_port,tcp_socket_dict,node_id):
 def deliver_queue_head(msg):   # deliver the queue head to application layer and delete it from the queue
     global connection_bulid
     global myqueue
-    global time_record
-    global node_name
-    #print("point 31")
-    connection_bulid_lock.acquire()
+    print("point 31")
     myqueue_lock.acquire()
-
-    # myqueue.update_msg_priority_and_reorder(msg)
-    # myqueue.update_msg_recv_feedback(msg,msg.SenderNodeName)
-    if msg.MessageID not in myqueue.recv_feedback.keys():
-        myqueue_lock.release()
-        connection_bulid_lock.release()
-         ###############
-        #delete_lock.release()
-        ################
-        return 
     feed_back_recv= myqueue.recv_feedback[msg.MessageID]
-    #print("feed_back_recv is:",feed_back_recv)
+    print("feed_back_recv is:",feed_back_recv)
+    myqueue_lock.release()
     flag=1
-   # print("point 32")
+    connection_bulid_lock.acquire()
+    print("point 32")
     for conn in connection_bulid:
         if conn not in feed_back_recv:
             flag=0 
-    myqueue_lock.release()
     connection_bulid_lock.release()
-    ###############
-    #delete_lock.release()
-    ################
-    #print("point 33")
+    print("point 33")
     if flag==1:
-       #print("point 34")
-        #print("qqqqqqqqqqqqqqqqqqqqqqqqq",msg.MessageID.split('.')[0])
-        if msg.MessageID.split('.')[0]==node_name:
-            finish_T=time.time()
-            time_record[msg.MessageID].append(finish_T)
+        print("point 34")
         update_balances(msg)
-        #print("point 35")
+        print("point 35")
         myqueue_lock.acquire()
-        #print("point 36")
+        print("point 36")
         myqueue.delete_msg(msg)
-        #print("point 37")
+        print("point 37")
         myqueue.delete_recv_feedback(msg)
-        #print("point 38")
+        print("point 38")
         myqueue_lock.release()
-       # print("point 39")
+        print("point 39")
     
 def update_balances(msg):
     global myqueue
@@ -253,11 +230,6 @@ def update_balances(msg):
 
     elif operation == 'TRANSFER':
         myqueue_lock.acquire()
-        if msg.Content.split()[1] not in myqueue.balance_dict.keys():
-            print('Invalid operation! The sponser does not exist!')
-            return -1
-        if msg.Content.split()[3] not in myqueue.balance_dict.keys():
-            myqueue.balance_dict[msg.Content.split()[3]]=0
         if myqueue.balance_dict[msg.Content.split()[1]]>=int(msg.Content.split()[4]):
             myqueue.balance_dict[msg.Content.split()[1]] -= int(msg.Content.split()[4])
             myqueue.balance_dict[msg.Content.split()[3]] += int(msg.Content.split()[4])
@@ -285,11 +257,11 @@ def deliver(msg):  # upon receive a message
     global node_name
     global timestamp
 
-    #print("point 1")
+    print("point 1")
     # if have seen before and this time is just a R-multicast from someone else
     msg_see_before_lock.acquire()
     if msg.MessageID in msg_see_before:
-       # print("point 2")
+        print("point 2")
         msg_see_before_lock.release()
         myqueue_lock.acquire()
         myqueue.update_msg_priority_and_reorder(msg)
@@ -298,7 +270,7 @@ def deliver(msg):  # upon receive a message
 
     # if this is the first time to see this message
     else: 
-       # print("point 3")
+        print("point 3")
         msg_see_before_lock.release()
         original_SenderNodeName=msg.SenderNodeName
         msg.SenderNodeName=node_name  # self nodename?
@@ -325,13 +297,13 @@ def deliver(msg):  # upon receive a message
 def multicast(msg):
     global connection_bulid
     global tcp_socket_dict
-   # print("point 4")
+    print("point 4")
     local_connect_copy=[]
     connection_bulid_lock.acquire()
     for e in connection_bulid:
         local_connect_copy.append(e)
     connection_bulid_lock.release()
-   # print("point 5")
+    print("point 5")
     send_data=json.dumps(msg,default=msgobj_2_json).encode('utf-8')  # the encoded data need to be sent
     for conn in local_connect_copy:
         tcp_connect_lock.acquire()
@@ -340,108 +312,69 @@ def multicast(msg):
         # print("tcp_socket:",tcp_socket)
         # print("type of tcp_socket",type(tcp_socket))
         tcp_connect_lock.release()
-       # print("point 6")
-       # print("send data:",send_data,"to",conn)
-        try:
-            send_res=tcp_socket.send(send_data)
-            time.sleep(1)
-           # print("point 7")
-        except:
-          #  print("point 8")
-            tcp_socket.close()
+        print("point 6")
+        print("send data:",send_data,"to",conn)
+        send_res=tcp_socket.send(send_data)
+        print("point 7")
+        if send_res<0:  # if target node failed
+            print("point 8")
             connection_bulid_lock.acquire()
-          #  print("connection_bulid_before_delete:",connection_bulid)
-          #  print("conn_who_need_delete:",conn)
-            if conn in connection_bulid:
-                connection_bulid.remove(conn)
-           # print("connection_bulid_after_delete:",connection_bulid)
+            connection_bulid.remove(conn)
             connection_bulid_lock.release()
             deliver_queue_head(msg)
-
-
-def __receive(client_socket):
-    global msg_see_before
-    global myqueue
-    while True:
-        recv_data=client_socket.recv(156).decode('utf-8')
-        #print("point 9")
-        if len(recv_data)>0:
-          #  print("receive data:",recv_data,"from client socket",client_socket)
-            msg=json.loads(recv_data,object_hook=json_2_msgobj)
-            msg_see_before_lock.acquire()
-            if msg.MessageID in msg_see_before:
-                msg_see_before_lock.release()
-              #  print("point 10")
-                ############
-                #delete_lock.acquire()
-                ############
-                deliver(msg)
-               # print("point 11")
-                deliver_queue_head(msg)
-              # print("point 12")
-                
-            else:
-                msg_see_before_lock.release()
-               # print("point 13")
-                deliver(msg)
-               # print("point 14")
-                deliver_queue_head(msg)
-               # print("point 15")
-                multicast(msg)
-               # print("point 16")
-        else:
-            break
-    client_socket.close()
-
+ 
 def receive_message(tcp_server_socket):
     global msg_see_before
     global myqueue
     while True:
         client_socket, clientAddr = tcp_server_socket.accept()
-        new_rece=Thread(target=__receive,args=(client_socket,))
-        new_rece.start()
-        time.sleep(1)
-
-
+        recv_data=client_socket.recv(128).decode('utf-8')
+        print("point 9")
         
-            
-        
-
-    # client_socket.close() 
-        
-    
-
-        
-
+        if len(recv_data)>0:
+            print("receive data:",recv_data,"from client socket",client_socket)
+            msg=json.loads(recv_data,object_hook=json_2_msgobj)
+            msg_see_before_lock.acquire()
+            if msg.MessageID in msg_see_before:
+                msg_see_before_lock.release()
+                print("point 10")
+                deliver(msg)
+                print("point 11")
+                deliver_queue_head(msg)
+                print("point 12")
+                
+            else:
+                msg_see_before_lock.release()
+                print("point 13")
+                deliver(msg)
+                print("point 14")
+                multicast(msg)
+                print("point 15")
             
 def get_events():
     global node_name
     global timestamp
-    global time_record
     while True:
         for line in sys.stdin:
             if len(line)!=0:
                 # print(line)
                 timestamp_lock.acquire()
-               # print("point 21")
+                print("point 21")
                 MessageID=node_name+'.'+str(timestamp)
-               # print("point 22")
+                print("point 22")
                 sequence_number=node_name+'.'+str(timestamp)
-               # print("point 23")
+                print("point 23")
                 timestamp+=1
-               # print("point 24")
+                print("point 24")
                 timestamp_lock.release()
-               # print("point 25")
+                print("point 25")
                 new_msg=Message(node_name,line,MessageID,sequence_number)
-                #print("point 26")
+                print("point 26")
                 deliver(new_msg)  # deliver to self
-               # print("point 27")
-                time.sleep(2)
-                start_T=time.time()
-                time_record[new_msg.MessageID]=[]
-                time_record[new_msg.MessageID].append(start_T)
+                print("point 27")
+              
                 multicast(new_msg)  # send to others
-               # print("point 28")
+                print("point 28")
    
 
 def main():
@@ -452,7 +385,6 @@ def main():
     global connection_bulid
     global tcp_socket_dict
     global ALL_CONNECTED
-    global time_record
     node_name = sys.argv[1]
     port = int(sys.argv[2])
     host = '127.0.0.1' # can connect with any ip
@@ -488,30 +420,8 @@ def main():
     # Normal working process
     while True:
         # print("success")
-        try:
-            get_events()
-        except:
-            filename=node_name+"_log.txt"
-            wf=open(filename,'w')
-            # message_len=len(time_record.keys())
-            # wf.write(f"send {message_len} messages\n")
-            avg=0
-            mlen=0
-            #print(time_record)
-            for k in time_record.keys():
-                if len(time_record[k])==2:
-                    mlen+=1
-                    time_diff=str(1000*abs(float(time_record[k][1])-float(time_record[k][0])))
-                    avg+=float(time_diff)
-                    wf.write(f"Time difference for {k} is: {time_diff}\n")
-                    
-            avg=avg/mlen
-            wf.write(f"The number of message send is : {mlen}\n")
-            wf.write(f"The final average time difference is: {avg}\n")
-            total_band=156*mlen
-            wf.write(f"The final bandwidth is: {total_band}")
-            break
-
+        
+        get_events()
 
 
     # pass
